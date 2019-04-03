@@ -273,7 +273,12 @@ class FlowSolver2d(FrozenClass):
             raise Exception('Unsupported finite element family {:}'.format(self.options.element_family))
         self.function_spaces.V_2d = MixedFunctionSpace([self.function_spaces.U_2d, self.function_spaces.H_2d])
 
-        self.function_spaces.Q_2d = get_functionspace(self.mesh2d, 'DG', 1, name='Q_2d')
+        if self.options.tracer_element_family == 'dg':
+            self.function_spaces.Q_2d = FunctionSpace(self.mesh2d, 'DG', 1, name='Q_2d')
+        elif self.options.tracer_element_family == 'cg':
+            self.function_spaces.Q_2d = FunctionSpace(self.mesh2d, 'CG', 1, name='Q_2d')
+        else:
+            raise Exception('Unsupported finite element family {:}'.format(self.options.tracer_element_family))
 
         self._isfrozen = True
 
@@ -298,11 +303,18 @@ class FlowSolver2d(FrozenClass):
         )
         self.eq_sw.bnd_functions = self.bnd_functions['shallow_water']
         if self.options.solve_tracer:
+            self.options.use_limiter_for_tracers &= self.options.tracer_element_family == 'dg'
+            self.options.use_lax_friedrichs_tracer &= self.options.tracer_element_family == 'dg'
+            self.options.use_su_stabilization_tracer &= self.options.tracer_element_family == 'cg'
+            if self.options.tracer_element_family == 'cg':
+                self.options.use_su_stabilization_tracer = True
+
             self.fields.tracer_2d = Function(self.function_spaces.Q_2d, name='tracer_2d')
             if self.options.timestepper_type == 'CrankNicolson':
                 self.eq_tracer = tracer_eq_2d.TracerEquation2D(self.function_spaces.Q_2d, bathymetry=self.fields.bathymetry_2d,
                                                                use_lax_friedrichs=self.options.use_lax_friedrichs_tracer,
-                                                               sipg_parameter=self.options.sipg_parameter_tracer)
+                                                               sipg_parameter=self.options.sipg_parameter_tracer,
+                                                               use_su=self.options.use_su_stabilization_tracer)
                 if self.options.use_limiter_for_tracers and self.options.polynomial_degree > 0:
                     self.tracer_limiter = limiter.VertexBasedP1DGLimiter(self.function_spaces.Q_2d)
                 else:

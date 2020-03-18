@@ -410,11 +410,16 @@ class HUDivTerm(ShallowWaterContinuityTerm):
     """
     def residual(self, uv, eta, uv_old, eta_old, fields, fields_old, bnd_conditions=None):
         total_h = self.get_total_depth(eta_old)
+        b = self.bathymetry
 
         hu_by_parts = self.u_continuity in ['dg', 'hdiv']
 
         if hu_by_parts:
-            f = -inner(grad(self.eta_test), total_h*uv)*self.dx
+            if self.options.use_lagrangian_formulation:
+                f = -inner(grad(self.eta_test), b*uv)*self.dx
+                f += -inner(grad(eta_old*self.eta_test), uv)*self.dx
+            else:
+                f = -inner(grad(self.eta_test), total_h*uv)*self.dx
             if self.eta_is_dg:
                 h = avg(total_h)
                 uv_rie = avg(uv) + sqrt(g_grav/h)*jump(eta, self.normal)
@@ -436,7 +441,10 @@ class HUDivTerm(ShallowWaterContinuityTerm):
                     h_rie = self.bathymetry + eta_rie
                     f += h_rie*un_rie*self.eta_test*ds_bnd
         else:
-            f = div(total_h*uv)*self.eta_test*self.dx
+            if self.options.use_lagrangian_formulation:
+                f = (eta_old*div(uv) + div(b*uv))*self.eta_test*self.dx
+            else:
+                f = div(total_h*uv)*self.eta_test*self.dx
             for bnd_marker in self.boundary_markers:
                 funcs = bnd_conditions.get(bnd_marker)
                 ds_bnd = ds(int(bnd_marker), degree=self.quad_degree)
@@ -464,7 +472,7 @@ class HorizontalAdvectionTerm(ShallowWaterMomentumTerm):
     """
     def residual(self, uv, eta, uv_old, eta_old, fields, fields_old, bnd_conditions=None):
 
-        if not self.options.use_nonlinear_equations:
+        if not self.options.use_nonlinear_equations or self.options.use_lagrangian_formulation:
             return 0
 
         horiz_advection_by_parts = True

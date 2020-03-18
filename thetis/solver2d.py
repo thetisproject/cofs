@@ -296,7 +296,8 @@ class FlowSolver2d(FrozenClass):
             self.fields.tracer_2d = Function(self.function_spaces.Q_2d, name='tracer_2d')
             self.eq_tracer = tracer_eq_2d.TracerEquation2D(self.function_spaces.Q_2d, bathymetry=self.fields.bathymetry_2d,
                                                            use_lax_friedrichs=self.options.use_lax_friedrichs_tracer,
-                                                           sipg_parameter=self.options.sipg_parameter_tracer)
+                                                           sipg_parameter=self.options.sipg_parameter_tracer,
+                                                           use_lagrangian_formulation=self.options.use_lagrangian_formulation)
             if self.options.use_limiter_for_tracers and self.options.polynomial_degree > 0:
                 self.tracer_limiter = limiter.VertexBasedP1DGLimiter(self.function_spaces.Q_2d)
             else:

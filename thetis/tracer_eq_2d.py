@@ -32,7 +32,8 @@ class TracerTerm(Term):
     boundary functions.
     """
     def __init__(self, function_space,
-                 bathymetry=None, use_lax_friedrichs=True, sipg_parameter=Constant(10.0)):
+                 bathymetry=None, use_lax_friedrichs=True, sipg_parameter=Constant(10.0),
+                 use_lagrangian_formulation=False):
         """
         :arg function_space: :class:`FunctionSpace` where the solution belongs
         :kwarg bathymetry: bathymetry of the domain
@@ -45,6 +46,7 @@ class TracerTerm(Term):
         self.horizontal_dg = continuity.horizontal == 'dg'
         self.use_lax_friedrichs = use_lax_friedrichs
         self.sipg_parameter = sipg_parameter
+        self.use_lagrangian_formulation = use_lagrangian_formulation
 
         # define measures with a reasonable quadrature degree
         p = self.function_space.ufl_element().degree()
@@ -112,7 +114,7 @@ class HorizontalAdvectionTerm(TracerTerm):
     jump and average operators across the interface.
     """
     def residual(self, solution, solution_old, fields, fields_old, bnd_conditions=None):
-        if fields_old.get('uv_2d') is None:
+        if fields_old.get('uv_2d') is None or self.use_lagrangian_formulation:
             return 0
         elev = fields_old['elev_2d']
         self.corr_factor = fields_old.get('tracer_advective_velocity_factor')

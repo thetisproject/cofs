@@ -271,7 +271,8 @@ class TracerEquation2D(Equation):
     def __init__(self, function_space,
                  bathymetry=None,
                  use_lax_friedrichs=False,
-                 sipg_parameter=Constant(10.0)):
+                 sipg_parameter=Constant(10.0),
+                 use_lagrangian_formulation=False):
         """
         :arg function_space: :class:`FunctionSpace` where the solution belongs
         :kwarg bathymetry: bathymetry of the domain
@@ -282,7 +283,7 @@ class TracerEquation2D(Equation):
         """
         super(TracerEquation2D, self).__init__(function_space)
 
-        args = (function_space, bathymetry, use_lax_friedrichs, sipg_parameter)
+        args = (function_space, bathymetry, use_lax_friedrichs, sipg_parameter, use_lagrangian_formulation)
         self.add_term(HorizontalAdvectionTerm(*args), 'explicit')
         self.add_term(HorizontalDiffusionTerm(*args), 'explicit')
         self.add_term(SourceTerm(*args), 'source')

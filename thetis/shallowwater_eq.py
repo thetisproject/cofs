@@ -414,8 +414,10 @@ class HUDivTerm(ShallowWaterContinuityTerm):
 
         hu_by_parts = self.u_continuity in ['dg', 'hdiv']
 
+        lagrangian = hasattr(self.options, 'use_lagrangian_formulation') and self.options.use_lagrangian_formulation
+
         if hu_by_parts:
-            if self.options.use_lagrangian_formulation:
+            if lagrangian:
                 f = -inner(grad(self.eta_test), b*uv)*self.dx
                 f += -inner(grad(eta_old*self.eta_test), uv)*self.dx
             else:
@@ -441,7 +443,7 @@ class HUDivTerm(ShallowWaterContinuityTerm):
                     h_rie = self.bathymetry + eta_rie
                     f += h_rie*un_rie*self.eta_test*ds_bnd
         else:
-            if self.options.use_lagrangian_formulation:
+            if lagrangian:
                 f = (eta_old*div(uv) + div(b*uv))*self.eta_test*self.dx
             else:
                 f = div(total_h*uv)*self.eta_test*self.dx
@@ -472,7 +474,8 @@ class HorizontalAdvectionTerm(ShallowWaterMomentumTerm):
     """
     def residual(self, uv, eta, uv_old, eta_old, fields, fields_old, bnd_conditions=None):
 
-        if not self.options.use_nonlinear_equations or self.options.use_lagrangian_formulation:
+        lagrangian = hasattr(self.options, 'use_lagrangian_formulation') and self.options.use_lagrangian_formulation
+        if not self.options.use_nonlinear_equations or lagrangian:
             return 0
 
         horiz_advection_by_parts = True

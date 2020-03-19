@@ -310,3 +310,9 @@ field_metadata['hcc_metric_3d'] = {
     'unit': '-',
     'filename': 'HCCMetric3d',
 }
+field_metadata['mesh_velocity'] = {
+    'name': 'Mesh velocity',
+    'shortname': 'Mesh velocity',
+    'unit': 'm s-1',
+    'filename': 'MeshVelocity',
+}

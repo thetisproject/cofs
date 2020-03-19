@@ -54,7 +54,9 @@ class CoupledTimeIntegrator2D(timeintegrator.TimeIntegratorBase):
             'wind_stress': self.options.wind_stress,
             'atmospheric_pressure': self.options.atmospheric_pressure,
             'momentum_source': self.options.momentum_source_2d,
-            'volume_source': self.options.volume_source_2d, }
+            'volume_source': self.options.volume_source_2d,
+            'mesh_velocity': solver.fields.mesh_velocity,
+        }
 
         if issubclass(self.swe_integrator, timeintegrator.CrankNicolson):
             self.timesteppers.swe2d = self.swe_integrator(
@@ -84,6 +86,7 @@ class CoupledTimeIntegrator2D(timeintegrator.TimeIntegratorBase):
                       'source': self.options.tracer_source_2d,
                       'lax_friedrichs_tracer_scaling_factor': self.options.lax_friedrichs_tracer_scaling_factor,
                       'tracer_advective_velocity_factor': self.options.tracer_advective_velocity_factor,
+                      'mesh_velocity': solver.fields.mesh_velocity,
                       }
             if issubclass(self.tracer_integrator, timeintegrator.CrankNicolson):
                 self.timesteppers.tracer = self.tracer_integrator(solver.eq_tracer, solver.fields.tracer_2d,

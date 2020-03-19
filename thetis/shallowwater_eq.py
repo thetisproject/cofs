@@ -414,14 +414,12 @@ class HUDivTerm(ShallowWaterContinuityTerm):
 
         hu_by_parts = self.u_continuity in ['dg', 'hdiv']
 
-        lagrangian = hasattr(self.options, 'use_lagrangian_formulation') and self.options.use_lagrangian_formulation
+        ale = hasattr(self.options, 'use_ale_moving_mesh_2d') and self.options.use_ale_moving_mesh_2d
+        if ale:
+            uv = uv - fields_old['mesh_velocity']
 
         if hu_by_parts:
-            if lagrangian:
-                f = -inner(grad(self.eta_test), b*uv)*self.dx
-                f += -inner(grad(eta_old*self.eta_test), uv)*self.dx
-            else:
-                f = -inner(grad(self.eta_test), total_h*uv)*self.dx
+            f = -inner(grad(self.eta_test), total_h*uv)*self.dx
             if self.eta_is_dg:
                 h = avg(total_h)
                 uv_rie = avg(uv) + sqrt(g_grav/h)*jump(eta, self.normal)
@@ -443,10 +441,7 @@ class HUDivTerm(ShallowWaterContinuityTerm):
                     h_rie = self.bathymetry + eta_rie
                     f += h_rie*un_rie*self.eta_test*ds_bnd
         else:
-            if lagrangian:
-                f = (eta_old*div(uv) + div(b*uv))*self.eta_test*self.dx
-            else:
-                f = div(total_h*uv)*self.eta_test*self.dx
+            f = div(total_h*uv)*self.eta_test*self.dx
             for bnd_marker in self.boundary_markers:
                 funcs = bnd_conditions.get(bnd_marker)
                 ds_bnd = ds(int(bnd_marker), degree=self.quad_degree)
@@ -473,10 +468,17 @@ class HorizontalAdvectionTerm(ShallowWaterMomentumTerm):
     jump and average operators across the interface.
     """
     def residual(self, uv, eta, uv_old, eta_old, fields, fields_old, bnd_conditions=None):
-
-        lagrangian = hasattr(self.options, 'use_lagrangian_formulation') and self.options.use_lagrangian_formulation
-        if not self.options.use_nonlinear_equations or lagrangian:
-            return 0
+        ale = hasattr(self.options, 'use_ale_moving_mesh_2d') and self.options.use_ale_moving_mesh_2d
+        if self.options.use_nonlinear_equations:
+            if ale:
+                uv = uv - fields_old['mesh_velocity']
+                if norm(uv) < 1.0e-8:  # TODO: Better solution. Will not work if u and v later differ
+                    return 0
+        else:
+            if ale:
+                uv = -fields_old['mesh_velocity']
+            else:
+                return 0
 
         horiz_advection_by_parts = True
 

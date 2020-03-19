@@ -1296,60 +1296,59 @@ class MeshUpdater2d(object):
 
     Advection of the mesh coordinates is currently implemented using a simple forward Euler
     scheme, which may well lead to mesh tangling. An error is raised if mesh tangling is detected.
-
-    Lagrangian mode for 2D problems is activated using the `use_lagrangian_formulation` parameter
-    of :class:`ModelOptions2d`.
     """
-    def __init__(self, solver2d):
+    def __init__(self, solver2d, prescribed_velocity=None):
         """
         :arg solver2d: :class:`FlowSolver2d` object
+        :kwarg prescribed_velocity: function providing a mesh velocity
         """
         self.solver2d = solver2d
-        self.fields = solver2d.fields
-        self.xdot = Function(solver2d.function_spaces.P1DGv_2d, name="Mesh velocity")
-        self.lagrangian = hasattr(solver2d.options, 'use_lagrangian_formulation') and solver2d.options.use_lagrangian_formulation
+        coords = solver2d.mesh2d.coordinates
+        coord_space = coords.function_space()
+        dt = Constant(solver2d.dt)
+
+        # Define mesh velocity
+        self.prescribed_velocity = prescribed_velocity
+        if self.prescribed_velocity is None:
+            return
+        self.xdot = solver2d.fields.mesh_velocity
+        self.update_mesh_velocity()
 
         # Store initial Jacobian sign for later comparison
         self.jacobian_sign = Function(solver2d.function_spaces.P0_2d)
         self.jacobian_sign.interpolate(sign(JacobianDeterminant(solver2d.mesh2d)))
 
-        if self.lagrangian:
-            coords = solver2d.mesh2d.coordinates
-            coord_space = coords.function_space()
-            dt = Constant(solver2d.dt)
+        # # Mesh coordinate fields as represented in continuous space
+        # coord_space_cg = self.solver2d.function_spaces.P1v_2d
+        # x, ξ = TrialFunction(coord_space_cg), TestFunction(coord_space_cg)
+        # self.x_new = Function(coord_space_cg)
+        # self.x_old = interpolate(coords, coord_space_cg)
 
-            # # Mesh coordinate fields as represented in continuous space
-            # coord_space_cg = self.solver2d.function_spaces.P1v_2d
-            # x, ξ = TrialFunction(coord_space_cg), TestFunction(coord_space_cg)
-            # self.x_new = Function(coord_space_cg)
-            # self.x_old = interpolate(coords, coord_space_cg)
+        # Mesh coordinate fields
+        x, ξ = TrialFunction(coord_space), TestFunction(coord_space)
+        self.x_new = Function(coord_space)
+        self.x_old = interpolate(coords, coord_space)
 
-            # Mesh coordinate fields
-            x, ξ = TrialFunction(coord_space), TestFunction(coord_space)
-            self.x_new = Function(coord_space)
-            self.x_old = interpolate(coords, coord_space)
+        # # Projection transfer operators
+        # self.proj_coords_to_cg = Projector(coords, self.x_old)
+        # self.proj_coords_from_cg = Projector(self.x_old, coords)
 
-            # # Projection transfer operators
-            # self.proj_coords_to_cg = Projector(coords, self.x_old)
-            # self.proj_coords_from_cg = Projector(self.x_old, coords)
+        # Forward Euler mesh advection
+        a = inner(ξ, x)*dx
+        L = inner(ξ, self.x_old)*dx
+        L += dt*inner(ξ, dot(nabla_grad(self.x_old), self.xdot))*dx
 
-            # Forward Euler mesh advection
-            a = inner(ξ, x)*dx
-            L = inner(ξ, self.x_old)*dx
-            L += dt*inner(ξ, dot(nabla_grad(self.x_old), self.xdot))*dx
+        # Setup linear variational solver
+        problem = LinearVariationalProblem(a, L, self.x_new, bcs=None)  # TODO: bcs
+        params = {
+            "ksp_type": "gmres",
+            "pc_type": "bjacobi",
+            "sub_pc_type": "ilu",
+        }
+        self.mesh_mover = LinearVariationalSolver(problem, solver_parameters=params)
 
-            # Setup linear variational solver
-            problem = LinearVariationalProblem(a, L, self.x_new, bcs=None)  # TODO: bcs
-            params = {
-                "ksp_type": "gmres",
-                "pc_type": "bjacobi",
-                "sub_pc_type": "ilu",
-            }
-            self.mesh_mover = LinearVariationalSolver(problem, solver_parameters=params)
-
-    def update_mesh_velocity(self):  # TODO: Allow other prescribed velocities
-        uv, elev = self.fields.solution_2d.split()
-        self.xdot.assign(uv)
+    def update_mesh_velocity(self):
+        self.xdot.project(self.prescribed_velocity(self.solver2d.simulation_time))
 
     def check_inverted(self):
         ratio = Function(self.solver2d.function_spaces.P0_2d)
@@ -1357,8 +1356,8 @@ class MeshUpdater2d(object):
         if ratio.vector().gather().min() < 0.0:
             raise ValueError("Mesh has inverted elements!")
 
-    def update_lagrangian_mesh(self):
-        if self.lagrangian:
+    def update_mesh(self):
+        if self.prescribed_velocity is not None:
             self.update_mesh_velocity()
             # self.proj_coords_to_cg.project()
             self.mesh_mover.solve()

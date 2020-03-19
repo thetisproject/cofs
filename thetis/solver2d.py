@@ -283,6 +283,7 @@ class FlowSolver2d(FrozenClass):
         self.fields.solution_2d = Function(self.function_spaces.V_2d, name='solution_2d')
         self.fields.h_elem_size_2d = Function(self.function_spaces.P1_2d)
         get_horizontal_elem_size_2d(self.fields.h_elem_size_2d)
+        self.fields.mesh_velocity = Function(self.function_spaces.U_2d, name='mesh velocity')
         self.set_sipg_parameter()
 
         # ----- Equations
@@ -297,7 +298,7 @@ class FlowSolver2d(FrozenClass):
             self.eq_tracer = tracer_eq_2d.TracerEquation2D(self.function_spaces.Q_2d, bathymetry=self.fields.bathymetry_2d,
                                                            use_lax_friedrichs=self.options.use_lax_friedrichs_tracer,
                                                            sipg_parameter=self.options.sipg_parameter_tracer,
-                                                           use_lagrangian_formulation=self.options.use_lagrangian_formulation)
+                                                           use_ale_moving_mesh=self.options.use_ale_moving_mesh_2d)
             if self.options.use_limiter_for_tracers and self.options.polynomial_degree > 0:
                 self.tracer_limiter = limiter.VertexBasedP1DGLimiter(self.function_spaces.Q_2d)
             else:
@@ -331,7 +332,7 @@ class FlowSolver2d(FrozenClass):
             'wind_stress': self.options.wind_stress,
             'atmospheric_pressure': self.options.atmospheric_pressure,
             'momentum_source': self.options.momentum_source_2d,
-            'volume_source': self.options.volume_source_2d, }
+            'volume_source': self.options.volume_source_2d,}
         self.set_time_step()
         if self.options.timestepper_type == 'SSPRK33':
             self.timestepper = rungekutta.SSPRK33(self.eq_sw, self.fields.solution_2d,
@@ -589,7 +590,8 @@ class FlowSolver2d(FrozenClass):
         sys.stdout.flush()
 
     def iterate(self, update_forcings=None,
-                export_func=None):
+                export_func=None,
+                prescribed_velocity=None):
         """
         Runs the simulation
 
@@ -601,6 +603,8 @@ class FlowSolver2d(FrozenClass):
             (if any).
         :kwarg export_func: User-defined function (with no arguments) that will
             be called on every export.
+        :kwarg prescribed_velocity: User-defined function that takes simulation
+            time as an argument that provides a mesh velocity for mesh movement.
         """
         # TODO I think export function is obsolete as callbacks are in place
         if not self._initialized:
@@ -644,15 +648,12 @@ class FlowSolver2d(FrozenClass):
 
         initial_simulation_time = self.simulation_time
         internal_iteration = 0
-
-        mesh_updater = MeshUpdater2d(self)
-        lagrangian = hasattr(self.options, 'use_lagrangian_formulation') and self.options.use_lagrangian_formulation
+        mesh_updater = MeshUpdater2d(self, prescribed_velocity=prescribed_velocity)
 
         while self.simulation_time <= self.options.simulation_end_time - t_epsilon:
 
             self.timestepper.advance(self.simulation_time, update_forcings)
-            if lagrangian:
-                mesh_updater.update_lagrangian_mesh()
+            mesh_updater.update_mesh()
 
             # Move to next time step
             self.iteration += 1

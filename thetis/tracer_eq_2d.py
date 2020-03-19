@@ -33,7 +33,7 @@ class TracerTerm(Term):
     """
     def __init__(self, function_space,
                  bathymetry=None, use_lax_friedrichs=True, sipg_parameter=Constant(10.0),
-                 use_lagrangian_formulation=False):
+                 use_ale_moving_mesh=False):
         """
         :arg function_space: :class:`FunctionSpace` where the solution belongs
         :kwarg bathymetry: bathymetry of the domain
@@ -46,7 +46,7 @@ class TracerTerm(Term):
         self.horizontal_dg = continuity.horizontal == 'dg'
         self.use_lax_friedrichs = use_lax_friedrichs
         self.sipg_parameter = sipg_parameter
-        self.use_lagrangian_formulation = use_lagrangian_formulation
+        self.use_ale_moving_mesh = use_ale_moving_mesh
 
         # define measures with a reasonable quadrature degree
         p = self.function_space.ufl_element().degree()
@@ -114,12 +114,21 @@ class HorizontalAdvectionTerm(TracerTerm):
     jump and average operators across the interface.
     """
     def residual(self, solution, solution_old, fields, fields_old, bnd_conditions=None):
-        if fields_old.get('uv_2d') is None or self.use_lagrangian_formulation:
-            return 0
+        if fields_old.get('uv_2d') is None:
+            if self.use_ale_moving_mesh:
+                uv = -fields_old['mesh_velocity']
+            else:
+                return 0
+        else:
+            uv = fields_old['uv_2d']
+            if self.use_ale_moving_mesh:
+                uv = uv - fields_old['mesh_velocity']
+                if norm(uv) < 1.0e-8:  # TODO: Better solution. Will not work if u and v later differ
+                    return 0
         elev = fields_old['elev_2d']
         self.corr_factor = fields_old.get('tracer_advective_velocity_factor')
 
-        uv = self.corr_factor * fields_old['uv_2d']
+        uv = self.corr_factor * uv
         uv_p1 = fields_old.get('uv_p1')
         uv_mag = fields_old.get('uv_mag')
         # FIXME is this an option?
@@ -272,7 +281,7 @@ class TracerEquation2D(Equation):
                  bathymetry=None,
                  use_lax_friedrichs=False,
                  sipg_parameter=Constant(10.0),
-                 use_lagrangian_formulation=False):
+                 use_ale_moving_mesh=False):
         """
         :arg function_space: :class:`FunctionSpace` where the solution belongs
         :kwarg bathymetry: bathymetry of the domain
@@ -283,7 +292,7 @@ class TracerEquation2D(Equation):
         """
         super(TracerEquation2D, self).__init__(function_space)
 
-        args = (function_space, bathymetry, use_lax_friedrichs, sipg_parameter, use_lagrangian_formulation)
+        args = (function_space, bathymetry, use_lax_friedrichs, sipg_parameter, use_ale_moving_mesh)
         self.add_term(HorizontalAdvectionTerm(*args), 'explicit')
         self.add_term(HorizontalDiffusionTerm(*args), 'explicit')
         self.add_term(SourceTerm(*args), 'source')

@@ -562,12 +562,8 @@ class ModelOptions2d(CommonModelOptions):
         Advects tracer in the associated (constant) velocity field.
         """).tag(config=True)
 
-    use_lagrangian_formulation = Bool(
-        False, help="""
-        Solve shallow water and tracer advection problems in a Lagrangian frame of reference.
-
-        NOTE: On its own, this does not enable mesh movement.
-        """).tag(config=True)
+    use_ale_moving_mesh_2d = Bool(
+        False, help="Use ALE formulation.").tag(config=True)
 
 
 @attach_paired_options("timestepper_type",

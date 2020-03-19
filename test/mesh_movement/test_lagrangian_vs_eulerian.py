@@ -29,7 +29,7 @@ def run(mode, **model_options):
     options.solve_tracer = True
     options.tracer_only = True
     options.horizontal_diffusivity = None
-    options.use_lagrangian_formulation = mode == 'lagrangian'
+    options.use_ale_moving_mesh_2d = mode == 'lagrangian'
     options.update(model_options)
 
     # Constant uniform fluid velocity parallel to mesh periodicity
@@ -46,8 +46,14 @@ def run(mode, **model_options):
     neumann = {'diff_flux': Constant(0.0)}
     solver_obj.bnd_functions['tracer'] = {1: neumann, 2: neumann}
 
+    def get_fluid_velocity(t):
+        uv, eta = solver_obj.fields.solution_2d.split()
+        return uv
+
+    prescribed_velocity = None if mode == 'eulerian' else get_fluid_velocity
+
     # Solve and check advection cycle is complete
-    solver_obj.iterate()
+    solver_obj.iterate(prescribed_velocity=prescribed_velocity)
     final = solver_obj.fields.tracer_2d
     if mode == 'lagrangian':
         final_coords = mesh2d.coordinates
@@ -83,5 +89,5 @@ def test_lagrangian_vs_eulerian(stepper):
 # ---------------------------
 
 if __name__ == "__main__":
-    run('lagrangian', no_exports=False, fields_to_export=['tracer_2d'])
     run('eulerian', no_exports=False, fields_to_export=['tracer_2d'])
+    run('lagrangian', no_exports=False, fields_to_export=['tracer_2d'])

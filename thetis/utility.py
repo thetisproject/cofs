@@ -1297,8 +1297,7 @@ class MeshUpdater2d(object):
         self.solver2d = solver2d
         self.fields = solver2d.fields
         self.xdot = Function(solver2d.function_spaces.P1DGv_2d, name="Mesh velocity")
-        self.lagrangian = hasattr(solver2d.options, 'use_lagrangian_formulation') and \
-                          solver2d.options.use_lagrangian_formulation
+        self.lagrangian = hasattr(solver2d.options, 'use_lagrangian_formulation') and solver2d.options.use_lagrangian_formulation
 
         if self.lagrangian:
             coords = solver2d.mesh2d.coordinates

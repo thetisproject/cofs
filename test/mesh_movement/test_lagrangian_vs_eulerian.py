@@ -6,6 +6,7 @@ In Lagrangian mode, the mesh should be identical to how it was initially after o
 """
 from thetis import *
 import pytest
+import os
 
 
 def run(mode, **model_options):
@@ -24,10 +25,10 @@ def run(mode, **model_options):
     options.simulation_export_time = T/10
     options.simulation_end_time = T
     options.fields_to_export_hdf5 = []
-    options.fields_to_export = ['tracer_2d']
+    options.no_exports = True
     options.solve_tracer = True
     options.tracer_only = True
-    options.horizontal_diffusivity = Constant(0.0)
+    options.horizontal_diffusivity = None
     options.use_lagrangian_formulation = mode == 'lagrangian'
     options.update(model_options)
 
@@ -39,6 +40,7 @@ def run(mode, **model_options):
     init = project(exp(-((x-L/2)**2 + (y-L/2)**2)), solver_obj.function_spaces.P1DG_2d)
     init_coords = mesh2d.coordinates.copy(deepcopy=True)
     solver_obj.assign_initial_conditions(uv=fluid_velocity, tracer=init)
+    init = solver_obj.fields.tracer_2d.copy(deepcopy=True)
 
     # Apply boundary conditions
     neumann = {'diff_flux': Constant(0.0)}
@@ -50,16 +52,20 @@ def run(mode, **model_options):
     if mode == 'lagrangian':
         final_coords = mesh2d.coordinates
         final_coords -= Constant(as_vector([L, 0.0]))  # TODO: Account for periodicity
-        final_coords -= init_coords
+        coord_diff = final_coords.copy(deepcopy=True)
+        coord_diff -= init_coords
         try:
             tol = 1.0e-8
-            assert final_coords.vector().gather().max() < tol
-            assert final_coords.vector().gather().min() > -tol
+            assert coord_diff.vector().gather().max() < tol
+            assert coord_diff.vector().gather().min() > -tol
         except AssertionError:
             raise ValueError("Initial and final mesh coordinates do not match.")
     error = abs(errornorm(init, final)/norm(init))
+    final -= init
+    if not options.no_exports:
+        File(os.path.join(options.output_directory, '{:s}_error.pvd'.format(mode))).write(final)
     print_output("Relative error in {:s} mode: {:.4f}%".format(mode.capitalize(), 100*error))
-    return error
+    return error  # FIXME: Surely error should be zero for Lagrangian mode?
 
 # ---------------------------
 # standard tests for pytest
@@ -77,4 +83,5 @@ def test_lagrangian_vs_eulerian(stepper):
 # ---------------------------
 
 if __name__ == "__main__":
-    run('lagrangian')
+    run('lagrangian', no_exports=False, fields_to_export=['tracer_2d'])
+    run('eulerian', no_exports=False, fields_to_export=['tracer_2d'])

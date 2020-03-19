@@ -645,9 +645,14 @@ class FlowSolver2d(FrozenClass):
         initial_simulation_time = self.simulation_time
         internal_iteration = 0
 
+        mesh_updater = MeshUpdater2d(self)
+        lagrangian = hasattr(self.options, 'use_lagrangian_formulation') and self.options.use_lagrangian_formulation
+
         while self.simulation_time <= self.options.simulation_end_time - t_epsilon:
 
             self.timestepper.advance(self.simulation_time, update_forcings)
+            if lagrangian:
+                mesh_updater.update_lagrangian_mesh()
 
             # Move to next time step
             self.iteration += 1

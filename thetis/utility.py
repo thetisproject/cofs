@@ -1296,25 +1296,31 @@ class MeshUpdater2d(object):
         """
         self.solver2d = solver2d
         self.fields = solver2d.fields
+        self.xdot = Function(solver2d.function_spaces.P1DGv_2d, name="Mesh velocity")
         if self.solver2d.options.use_lagrangian_formulation:
-            coords = solver2d.mesh.coordinates
+            coords = solver2d.mesh2d.coordinates
             coord_space = coords.function_space()
             dt = Constant(solver2d.dt)
 
-            # Mesh coordinate fields as represented in continuous space
-            coord_space_cg = self.solver2d.function_spaces.P1v_2d
-            x, ξ = TrialFunction(coord_space_cg), TestFunction(coord_space_cg)
-            self.x_new = Function(coord_space_cg)
-            self.x_old = Function(coord_space_cg)
+            # # Mesh coordinate fields as represented in continuous space
+            # coord_space_cg = self.solver2d.function_spaces.P1v_2d
+            # x, ξ = TrialFunction(coord_space_cg), TestFunction(coord_space_cg)
+            # self.x_new = Function(coord_space_cg)
+            # self.x_old = interpolate(coords, coord_space_cg)
 
-            # Projection transfer operators
-            self.proj_coords_to_cg = Projector(coords, self.x_old)
-            self.proj_coords_from_cg = Projector(self.x_old, coords)
+            # Mesh coordinate fields
+            x, ξ = TrialFunction(coord_space), TestFunction(coord_space)
+            self.x_new = Function(coord_space)
+            self.x_old = interpolate(coords, coord_space)
+
+            # # Projection transfer operators
+            # self.proj_coords_to_cg = Projector(coords, self.x_old)
+            # self.proj_coords_from_cg = Projector(self.x_old, coords)
 
             # Forward Euler mesh advection
             a = inner(ξ, x)*dx
             L = inner(ξ, self.x_old)*dx
-            L += dt*inner(ξ, dot(nabla_grad(self.x_old), self.fields.uv_2d))*dx
+            L += dt*inner(ξ, dot(nabla_grad(self.x_old), self.xdot))*dx
 
             # Setup linear variational solver
             problem = LinearVariationalProblem(a, L, self.x_new, bcs=None)  # TODO: bcs
@@ -1325,14 +1331,17 @@ class MeshUpdater2d(object):
             }
             self.mesh_mover = LinearVariationalSolver(problem, solver_parameters=params)
 
-    def update_mesh_velocity(self):  # TODO: Might only be needed for ALE
-        raise NotImplementedError
+    def update_mesh_velocity(self):  # TODO: Allow other prescribed velocities
+        uv, elev = self.fields.solution_2d.split()
+        self.xdot.assign(uv)
 
     def update_lagrangian_mesh(self):
-        # self.update_mesh_velocity()
-        self.proj_coords_to_cg.project()
+        self.update_mesh_velocity()
+        # self.proj_coords_to_cg.project()
         self.mesh_mover.solve()
-        self.proj_coords_from_cg.project()
+        # self.proj_coords_from_cg.project()
+        self.solver2d.mesh2d.coordinates.assign(self.x_new)
+        self.x_old.assign(self.x_new)
 
 
 class ALEMeshUpdater3d(object):

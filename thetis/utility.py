@@ -1299,6 +1299,10 @@ class MeshUpdater2d(object):
         self.xdot = Function(solver2d.function_spaces.P1DGv_2d, name="Mesh velocity")
         self.lagrangian = hasattr(solver2d.options, 'use_lagrangian_formulation') and solver2d.options.use_lagrangian_formulation
 
+        # Store initial Jacobian sign for later comparison
+        self.jacobian_sign = Function(solver2d.function_spaces.P0_2d)
+        self.jacobian_sign.interpolate(sign(JacobianDeterminant(solver2d.mesh2d)))
+
         if self.lagrangian:
             coords = solver2d.mesh2d.coordinates
             coord_space = coords.function_space()
@@ -1337,11 +1341,18 @@ class MeshUpdater2d(object):
         uv, elev = self.fields.solution_2d.split()
         self.xdot.assign(uv)
 
+    def check_inverted(self):
+        ratio = Function(self.solver2d.function_spaces.P0_2d)
+        ratio.interpolate(sign(JacobianDeterminant(self.solver2d.mesh2d))/self.jacobian_sign)
+        if ratio.vector().gather().min() < 0.0:
+            raise ValueError("Mesh has inverted elements!")
+
     def update_lagrangian_mesh(self):
         if self.lagrangian:
             self.update_mesh_velocity()
             # self.proj_coords_to_cg.project()
             self.mesh_mover.solve()
+            self.check_inverted()
             # self.proj_coords_from_cg.project()
             self.solver2d.mesh2d.coordinates.assign(self.x_new)
             self.x_old.assign(self.x_new)

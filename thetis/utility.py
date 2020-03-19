@@ -1289,10 +1289,20 @@ def get_sipg_ratio(nu):
 
 # TODO: ALEMeshUpdater2d
 class MeshUpdater2d(object):
-    # TODO: doc
+    """
+    Solve 2D shallow water and/or tracer advection problems in the Lagrangian sense. This means that
+    advection terms are dropped from the equations and instead it is the mesh coordinates which are
+    advected by the fluid velocity.
+
+    Advection of the mesh coordinates is currently implemented using a simple forward Euler
+    scheme, which may well lead to mesh tangling. An error is raised if mesh tangling is detected.
+
+    Lagrangian mode for 2D problems is activated using the `use_lagrangian_formulation` parameter
+    of :class:`ModelOptions2d`.
+    """
     def __init__(self, solver2d):
         """
-        :arg solver: :class:`FlowSolver2d` object
+        :arg solver2d: :class:`FlowSolver2d` object
         """
         self.solver2d = solver2d
         self.fields = solver2d.fields

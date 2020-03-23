@@ -5,7 +5,7 @@ The advection-diffusion equation of tracer :math:`T` in non-conservative form re
 
 .. math::
     \frac{\partial T}{\partial t}
-    + \nabla_h \cdot (\textbf{u} T)
+    + \textbf{u} \cdot \nabla_h T
     = \nabla_h \cdot (\mu_h \nabla_h T)
     :label: tracer_eq_2d
 

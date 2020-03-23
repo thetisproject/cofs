@@ -98,6 +98,7 @@ def run(setup, refinement, do_export=True, **options):
     solver_obj.options.horizontal_viscosity_scale = Constant(50.0)
     solver_obj.options.update(options)
     solver_obj.options.solve_tracer = True
+    solver_obj.options.tracer_only = True
     solver_obj.options.timestepper_options.implicitness_theta = 1.0
     solver_obj.create_function_spaces()
 

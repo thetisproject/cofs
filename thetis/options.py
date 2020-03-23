@@ -556,10 +556,17 @@ class ModelOptions2d(CommonModelOptions):
 
         Prints overshoot values that exceed the initial range to stdout.
         """).tag(config=True)
+
+    # Tracer advection with a prescribed fluid velocity
     tracer_only = Bool(
-        False, help="""Hold shallow water variables in initial state
+        False, help="""bool: Hold shallow water variables in initial state
 
         Advects tracer in the associated (constant) velocity field.
+        """).tag(config=True)
+    use_ale_tracer_only = Bool(
+        False, help="""bool: Apply ALE mesh movement for tracer advection problems.
+
+        Raises ``NotImplementedError`` if used when :attr:`tracer_only` is ``True``.
         """).tag(config=True)
 
 

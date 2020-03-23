@@ -885,7 +885,7 @@ class FlowSolver(FrozenClass):
         self.copy_uv_to_uv_dav_3d = ExpandFunctionTo3d(self.fields.uv_2d, self.fields.uv_dav_3d,
                                                        elem_height=self.fields.v_elem_size_3d)
         self.uv_mag_solver = VelocityMagnitudeSolver(self.fields.uv_mag_3d, u=self.fields.uv_3d)
-        self.mesh_updater = ALEMeshUpdater(self)
+        self.mesh_updater = ALEMeshUpdater3d(self)
 
         if self.options.use_smagorinsky_viscosity:
             self.smagorinsky_diff_solver = SmagorinskyViscosity(self.fields.uv_p1_3d, self.fields.smag_visc_3d,

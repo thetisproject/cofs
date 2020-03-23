@@ -1229,7 +1229,127 @@ def get_sipg_ratio(nu):
         #       element and use the property that the Bernstein polynomials bound the solution.
 
 
-class ALEMeshUpdater(object):
+class ALEMeshUpdater2d(object):
+    """
+    Solve tracer advection problems with a prescribed velocity field using ALE
+    mesh movement.
+
+    Advection of the mesh coordinates is currently implemented using a simple
+    Forward Euler scheme which may lead to mesh tangling. An error is raised
+    if mesh tangling is detected.
+    """
+    def __init__(self, solver2d, prescribed_velocity=None, bc=None):
+        """
+        :arg solver2d: :class:`FlowSolver2d` object
+        :kwarg prescribed_velocity: User-defined function that takes simulation
+            time as an argument and updates the mesh velocity.
+        :kwarg bc: Optional boundary conditions for the mesh velocity.
+        """
+        self.solver2d = solver2d
+        self.prescribed_velocity = prescribed_velocity
+        self.bc = bc
+        try:
+            assert solver2d.mesh2d.topological_dimension() == 2
+            assert solver2d.mesh2d.ufl_cell() == ufl.triangle
+        except AssertionError:
+            raise NotImplementedError("ALE only currently implemented for triangles.")
+        self.dt = Constant(self.solver2d.dt)
+        self.coords = solver2d.mesh2d.coordinates
+        self.xdot_old = Function(self.coords, name="Time-lagged mesh velocity")
+
+        # Define discontinuous and continuous coordinate spaces
+        coord_space = self.coords.function_space()
+        self.coord_space_cg = self.solver2d.function_spaces.P1v_2d
+        self.xdot = Function(coord_space, name="Mesh velocity")
+
+        # Store initial Jacobian sign for later comparison to detect tangling
+        self.jacobian_sign = Function(solver2d.function_spaces.P0_2d)
+        self.jacobian_sign.interpolate(sign(JacobianDeterminant(solver2d.mesh2d)))
+        self.ratio = Function(self.solver2d.function_spaces.P0_2d)
+
+        # Define mesh velocity
+        if solver2d.options.mesh_velocity is None:  # Eulerian case
+            self.xdot_cg = None
+            return
+        self.xdot_cg = project(solver2d.options.mesh_velocity, self.coord_space_cg)
+
+        # Set up post-processor to apply boundary conditions to velocity
+        self.exterior_facets = set(self.solver2d.mesh2d.exterior_facets.unique_markers)
+        if prescribed_velocity is not None and len(self.exterior_facets) > 0:
+            self.xdot_proc = Function(self.coord_space_cg)
+            self.setup_velocity_postproc()
+        self.update_mesh_velocity()
+
+    def setup_velocity_postproc(self):
+        """
+        Set up a post-processor which enforces boundary conditions on the mesh velocity. If these
+        were not specified when the :class:`MeshUpdater2d` object was initialised, they default to
+        no mesh movement normal to boundaries. By default, tangential movement is allowed, but only
+        up until the end of boundary segments.
+        """
+        xdot, xi = TrialFunction(self.coord_space_cg), TestFunction(self.coord_space_cg)
+        a = inner(xi, xdot)*dx
+        L = inner(xi, self.xdot_cg)*dx
+
+        if self.bc is None:
+
+            # Enforce no mesh movement normal to boundaries
+            n = FacetNormal(self.solver2d.mesh2d)
+            a_bc = inner(dot(grad(xi), n), dot(grad(xdot), n))*ds
+            L_bc = inner(dot(grad(xi), n), Constant(as_vector([0.0, 0.0])))*ds
+            self.bc = [EquationBC(a_bc == L_bc, self.xdot_proc, 'on_boundary')]
+
+            # Allow tangential movement, but only up until the end of boundary segments
+            s = as_vector([n[1], -n[0]])
+            a_bc = inner(dot(grad(xi), s), dot(grad(xdot), s))*ds
+            L_bc = inner(dot(grad(xi), s), dot(grad(self.xdot_cg), s))*ds
+            bbc = None
+            if len(self.exterior_facets) > 1:
+                corners = [(i, j) for i in self.exterior_facets for j in self.exterior_facets.difference([i])]
+                bbc = DirichletBC(self.coord_space_cg, 0, corners)
+            self.bc.append(EquationBC(a_bc == L_bc, self.xdot_proc, 'on_boundary', bcs=bbc))
+
+        prob = LinearVariationalProblem(a, L, self.xdot_proc, bcs=self.bc)
+        self.velocity_postproc = LinearVariationalSolver(prob, solver_parameters={'ksp_type': 'cg'})
+
+    def update_mesh_velocity(self):
+        if self.prescribed_velocity is not None:
+            self.xdot_cg.project(self.prescribed_velocity(self.solver2d.simulation_time))
+            if hasattr(self, 'velocity_postproc'):
+                self.velocity_postproc.solve()
+                self.xdot_cg.assign(self.xdot_proc)
+
+    def move_mesh(self):
+        """
+        Transfer (continuous) prescribed mesh velocity to (discontinuous) mesh coordinate space.
+        """
+        par_loop(('{[i, j] : 0 <= i < cg.dofs and 0 <= j < 2}', 'dg[i, j] = cg[i, j]'), dx,
+                 {'cg': (self.xdot_cg, READ), 'dg': (self.xdot, WRITE)}, is_loopy_kernel=True)
+        self.coords.assign(self.xdot_old + self.dt*self.xdot)
+        self.xdot_old.assign(self.coords)
+
+    def check_inverted(self):
+        """
+        If the Jacobian determinant changes sign in any mesh element then it has tangled.
+        """
+        self.ratio.interpolate(sign(JacobianDeterminant(self.solver2d.mesh2d))/self.jacobian_sign)
+        if self.ratio.vector().gather().min() < 0.0:
+            raise ValueError("Mesh has inverted elements!")
+
+    def update_mesh(self):
+        """
+        Update mesh coordinates according to prescribed mesh velocity.
+
+        The algorithm applied boundary conditions to the mesh velocity as a post-processing step and
+        checks for inverted elements at every timestep.
+        """
+        if self.xdot_cg is not None:
+            self.update_mesh_velocity()
+            self.move_mesh()
+            self.check_inverted()
+
+
+class ALEMeshUpdater3d(object):
     """
     Class that handles vertically moving ALE mesh
 

@@ -112,12 +112,19 @@ class HorizontalAdvectionTerm(TracerTerm):
     jump and average operators across the interface.
     """
     def residual(self, solution, solution_old, fields, fields_old, bnd_conditions=None):
-        if fields_old.get('uv_2d') is None:
+        uv = fields_old.get('uv_2d')
+        mv = fields_old.get('mesh_velocity')
+        if mv is None and uv is None:
             return 0
+        elif mv is not None and uv is None:
+            uv = -mv
+        elif mv is not None and uv is not None:
+            uv = uv - mv
+
         elev = fields_old['elev_2d']
         self.corr_factor = fields_old.get('tracer_advective_velocity_factor')
 
-        uv = self.corr_factor * fields_old['uv_2d']
+        uv = self.corr_factor * uv
         uv_p1 = fields_old.get('uv_p1')
         uv_mag = fields_old.get('uv_mag')
         # FIXME is this an option?

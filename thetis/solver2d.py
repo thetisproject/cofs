@@ -298,6 +298,11 @@ class FlowSolver2d(FrozenClass):
         )
         self.eq_sw.bnd_functions = self.bnd_functions['shallow_water']
         if self.options.solve_tracer:
+            if self.options.mesh_velocity is not None:
+                try:
+                    assert self.options.tracer_only
+                except AssertionError:
+                    raise NotImplementedError("ALE currently only implemented for prescribed velocity fields.")  # TODO
             self.fields.tracer_2d = Function(self.function_spaces.Q_2d, name='tracer_2d')
             if self.options.timestepper_type == 'CrankNicolson':
                 self.eq_tracer = tracer_eq_2d.TracerEquation2D(self.function_spaces.Q_2d, bathymetry=self.fields.bathymetry_2d,
@@ -338,7 +343,8 @@ class FlowSolver2d(FrozenClass):
             'wind_stress': self.options.wind_stress,
             'atmospheric_pressure': self.options.atmospheric_pressure,
             'momentum_source': self.options.momentum_source_2d,
-            'volume_source': self.options.volume_source_2d, }
+            'volume_source': self.options.volume_source_2d,
+            'mesh_velocity': self.options.mesh_velocity, }
         self.set_time_step()
         if self.options.timestepper_type == 'SSPRK33':
             self.timestepper = rungekutta.SSPRK33(self.eq_sw, self.fields.solution_2d,
@@ -596,7 +602,8 @@ class FlowSolver2d(FrozenClass):
         sys.stdout.flush()
 
     def iterate(self, update_forcings=None,
-                export_func=None):
+                export_func=None,
+                update_mesh_velocity=None):
         """
         Runs the simulation
 
@@ -608,6 +615,8 @@ class FlowSolver2d(FrozenClass):
             (if any).
         :kwarg export_func: User-defined function (with no arguments) that will
             be called on every export.
+        :kwarg update_mesh_velocity: User-defined function that takes simulation
+            time as an argument that provides a mesh velocity for mesh movement.
         """
         # TODO I think export function is obsolete as callbacks are in place
         if not self._initialized:
@@ -651,10 +660,12 @@ class FlowSolver2d(FrozenClass):
 
         initial_simulation_time = self.simulation_time
         internal_iteration = 0
+        mesh_updater = ALEMeshUpdater2d(self, prescribed_velocity=update_mesh_velocity)
 
         while self.simulation_time <= self.options.simulation_end_time - t_epsilon:
 
             self.timestepper.advance(self.simulation_time, update_forcings)
+            mesh_updater.update_mesh()
 
             # Move to next time step
             self.iteration += 1

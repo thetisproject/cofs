@@ -563,10 +563,10 @@ class ModelOptions2d(CommonModelOptions):
 
         Advects tracer in the associated (constant) velocity field.
         """).tag(config=True)
-    use_ale_tracer_only = Bool(
-        False, help="""bool: Apply ALE mesh movement for tracer advection problems.
+    mesh_velocity = FiredrakeVectorExpression(
+        None, allow_none=True, help="""Velocity field for ALE mesh movement.
 
-        Raises ``NotImplementedError`` if used when :attr:`tracer_only` is ``True``.
+        Assumes (default) Eulerian case if set to ``None``.
         """).tag(config=True)
 
 

@@ -207,10 +207,11 @@ class HorizontalDiffusionTerm(TracerTerm):
         if self.horizontal_dg:
             alpha = self.sipg_parameter
             assert alpha is not None
-            sigma = avg(alpha / self.cellsize)
+            h = get_cell_widths_2d(self.mesh)
+            sigma_h = as_matrix([[alpha/h[0], 0], [0, alpha/h[1]]])
             ds_interior = self.dS
-            f += sigma*inner(jump(self.test, self.normal),
-                             dot(avg(diff_tensor), jump(solution, self.normal)))*ds_interior
+            f += inner(dot(avg(sigma_h), jump(self.test, self.normal)),
+                       dot(avg(diff_tensor), jump(solution, self.normal)))*ds_interior
             f += -inner(avg(dot(diff_tensor, grad(self.test))),
                         jump(solution, self.normal))*ds_interior
             f += -inner(jump(self.test, self.normal),

@@ -567,7 +567,6 @@ class HorizontalViscosityTerm(ShallowWaterMomentumTerm):
             return 0
 
         n = self.normal
-        h = self.cellsize
 
         if self.options.use_grad_div_viscosity_term:
             stress = nu*2.*sym(grad(uv))
@@ -581,8 +580,10 @@ class HorizontalViscosityTerm(ShallowWaterMomentumTerm):
         if self.u_continuity in ['dg', 'hdiv']:
             alpha = self.options.sipg_parameter
             assert alpha is not None
+            h = get_cell_widths_2d(self.mesh)
+            sigma_h = as_matrix([[alpha/h[0], 0], [0, alpha/h[1]]])
             f += (
-                + avg(alpha/h)*inner(tensor_jump(self.u_test, n), stress_jump)*self.dS
+                + inner(dot(avg(sigma_h), tensor_jump(self.u_test, n)), stress_jump)*self.dS
                 - inner(avg(grad(self.u_test)), stress_jump)*self.dS
                 - inner(tensor_jump(self.u_test, n), avg(stress))*self.dS
             )
@@ -606,7 +607,7 @@ class HorizontalViscosityTerm(ShallowWaterMomentumTerm):
                         stress_jump = nu*outer(delta_uv, n)
 
                     f += (
-                        alpha/h*inner(outer(self.u_test, n), stress_jump)*ds_bnd
+                        inner(dot(sigma_h, outer(self.u_test, n)), stress_jump)*ds_bnd
                         - inner(grad(self.u_test), stress_jump)*ds_bnd
                         - inner(outer(self.u_test, n), stress)*ds_bnd
                     )

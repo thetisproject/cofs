@@ -9,27 +9,34 @@ import pytest
 import os
 
 
-def run(mode, **model_options):
+def run(mode, velocity_type, **model_options):
     assert mode in ('lagrangian', 'eulerian')
     print_output("--- running {:s} mode".format(mode.capitalize()))
 
     # Set up domain
     n, L, T = 40, 10.0, 10.0
-    mesh2d = PeriodicRectangleMesh(n, n, L, L, direction='x')
-    # mesh2d = PeriodicRectangleMesh(n, n, L, L)
+    if velocity_type == 'constant':
+        mesh2d = PeriodicRectangleMesh(n, n, L, L, direction='x')
+    elif velocity_type == 'sinusoidal':
+        mesh2d = PeriodicRectangleMesh(n, n, L, L)
+    else:
+        raise ValueError("Velocity type '{:s}' not recognised.".format(velocity_type))
     x, y = SpatialCoordinate(mesh2d)
+    P1_2d = FunctionSpace(mesh2d, "CG", 1)
+    bathymetry2d = Function(P1_2d).assign(1.0)
 
     # Constant uniform fluid velocity parallel to mesh periodicity
     def update_mesh_velocity(t):
-        # return Constant(as_vector([L/T, 0.0]))
-        return interpolate(as_vector([L/T, 0.0]), mesh2d.coordinates.function_space())
+        vel_y = cos(pi*t/5.0) if velocity_type == 'sinusoidal' else 0.0
+        # return Constant(as_vector([L/T, vel_y]))
+        return interpolate(as_vector([L/T, vel_y]), mesh2d.coordinates.function_space())
     fluid_velocity = update_mesh_velocity(0.0)
     # update_mesh_velocity = None
 
     # Create solver object
-    solver_obj = solver2d.FlowSolver2d(mesh2d, Constant(1.0))
+    solver_obj = solver2d.FlowSolver2d(mesh2d, bathymetry2d)
     options = solver_obj.options
-    options.timestep = 0.2
+    options.timestep = 0.5
     options.simulation_export_time = T/10
     options.simulation_end_time = T
     options.fields_to_export_hdf5 = []
@@ -76,17 +83,26 @@ def run(mode, **model_options):
 # standard tests for pytest
 # ---------------------------
 
+
+@pytest.fixture(params=['constant', 'sinusoidal'])
+def velocity_type(request):
+    return request.param
+
 @pytest.mark.parametrize(('stepper'),
                          [('CrankNicolson')])
-def test_lagrangian_vs_eulerian(stepper):
-    eulerian_error = run('eulerian', timestepper_type=stepper)
-    lagrangian_error = run('lagrangian', timestepper_type=stepper)
+def test_lagrangian_vs_eulerian(velocity_type, stepper):
+    eulerian_error = run('eulerian', velocity_type, timestepper_type=stepper)
+    lagrangian_error = run('lagrangian', velocity_type, timestepper_type=stepper)
     assert lagrangian_error < eulerian_error
 
 # ---------------------------
 # run individual setup for debugging
 # ---------------------------
 
+
 if __name__ == "__main__":
-    # run('eulerian', no_exports=False, fields_to_export=['tracer_2d'])
-    run('lagrangian', no_exports=False, fields_to_export=['tracer_2d'])
+    # mode = 'eulerian'
+    mode = 'lagrangian'
+    # velocity = 'constant'
+    velocity = 'sinusoidal'
+    run(mode, velocity, no_exports=False, fields_to_export=['tracer_2d'])

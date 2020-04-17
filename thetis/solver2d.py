@@ -10,6 +10,7 @@ from . import implicitexplicit
 from . import coupled_timeintegrator_2d
 from . import tracer_eq_2d
 from . import conservative_tracer_eq_2d
+from . import error_estimation_2d
 import weakref
 import time as time_mod
 import numpy as np
@@ -319,6 +320,23 @@ class FlowSolver2d(FrozenClass):
             else:
                 self.tracer_limiter = None
 
+        # ----- Error estimators
+        self.error_estimator_sw = None
+        self.error_estimator_tracer = None
+        if self.options.estimate_error:
+            self.error_estimator_sw = error_estimation_2d.ShallowWaterGOErrorEstimator(
+                self.fields.solution_2d.function_space(),
+                self.fields.bathymetry_2d,
+                self.options
+            )
+            if self.options.solve_tracer:
+                self.error_estimator_tracer = error_estimation_2d.TracerGOErrorEstimator(
+                    self.function_spaces.Q_2d,
+                    bathymetry=self.fields.bathymetry_2d,
+                    use_lax_friedrichs=self.options.use_lax_friedrichs_tracer,
+                    sipg_parameter=self.options.sipg_parameter_tracer
+                )
+
         self._isfrozen = True  # disallow creating new attributes
 
     def get_swe_timestepper(self, integrator):
@@ -339,7 +357,10 @@ class FlowSolver2d(FrozenClass):
         }
 
         args = (self.eq_sw, self.fields.solution_2d, fields, self.dt, )
-        kwargs = {'bnd_conditions': self.bnd_functions['shallow_water']}
+        kwargs = {
+            'bnd_conditions': self.bnd_functions['shallow_water'],
+            'error_estimator': self.error_estimator_sw,
+        }
         if hasattr(self.options.timestepper_options, 'use_semi_implicit_linearization'):
             kwargs['semi_implicit'] = self.options.timestepper_options.use_semi_implicit_linearization
         if hasattr(self.options.timestepper_options, 'implicitness_theta'):
@@ -391,6 +412,7 @@ class FlowSolver2d(FrozenClass):
         kwargs = {
             'bnd_conditions': self.bnd_functions['tracer'],
             'solver_parameters': self.options.timestepper_options.solver_parameters_tracer,
+            'error_estimator': self.error_estimator_tracer,
         }
         if hasattr(self.options.timestepper_options, 'use_semi_implicit_linearization'):
             kwargs['semi_implicit'] = self.options.timestepper_options.use_semi_implicit_linearization

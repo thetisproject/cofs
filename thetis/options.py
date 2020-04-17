@@ -566,6 +566,11 @@ class ModelOptions2d(CommonModelOptions):
 
         Advects tracer in the associated (constant) velocity field.
         """).tag(config=True)
+    estimate_error = Bool(
+        False, help="""Evaluate goal-oriented error estimators.
+
+        Only currently implemented for shallow water and 2D tracer models.
+        """).tag(config=True)
 
 
 @attach_paired_options("timestepper_type",
